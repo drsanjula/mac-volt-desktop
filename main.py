@@ -146,11 +146,11 @@ class DataCollector(threading.Thread):
 # --- UI COMPONENTS ---
 
 class MetricCard(ft.Container):
-    def __init__(self, title, value, unit, icon, color=ft.colors.BLUE_400):
+    def __init__(self, title, value, unit, icon, color=ft.Colors.BLUE_400):
         super().__init__()
-        self.title_text = ft.Text(title, size=12, color=ft.colors.GREY_500, weight=ft.FontWeight.BOLD)
-        self.value_text = ft.Text(value, size=24, color=ft.colors.WHITE, weight=ft.FontWeight.BOLD)
-        self.unit_text = ft.Text(unit, size=14, color=ft.colors.GREY_400)
+        self.title_text = ft.Text(title, size=12, color=ft.Colors.GREY_500, weight=ft.FontWeight.BOLD)
+        self.value_text = ft.Text(value, size=24, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD)
+        self.unit_text = ft.Text(unit, size=14, color=ft.Colors.GREY_400)
         self.icon_comp = ft.Icon(icon, color=color, size=30)
         
         self.content = ft.Row(
@@ -168,7 +168,7 @@ class MetricCard(ft.Container):
             spacing=15,
         )
         self.padding = 15
-        self.bgcolor = ft.colors.with_opacity(0.05, ft.colors.WHITE)
+        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.WHITE)
         self.border_radius = 12
         self.width = 200
 
@@ -195,16 +195,16 @@ def main(page: ft.Page):
     def update_ui():
         with lock:
             # Update Cards
-            power_card.update_value(f"{data.power_watts}", ft.colors.GREEN_400 if data.amperage >= 0 else ft.colors.YELLOW_400)
+            power_card.update_value(f"{data.power_watts}", ft.Colors.GREEN_400 if data.amperage >= 0 else ft.Colors.YELLOW_400)
             volt_card.update_value(f"{data.voltage:.2f}")
-            temp_card.update_value(f"{data.temperature}", ft.colors.GREEN_400 if data.temperature < 40 else ft.colors.RED_400)
+            temp_card.update_value(f"{data.temperature}", ft.Colors.GREEN_400 if data.temperature < 40 else ft.Colors.RED_400)
             amp_card.update_value(f"{abs(data.amperage)}")
             
             # Update Battery Header
             batt_percent.value = f"{data.battery_percent}%"
             batt_status.value = f"{data.charging_status} • {data.time_remaining}"
             batt_progress.value = data.battery_percent / 100
-            batt_progress.color = ft.colors.GREEN_400 if data.battery_percent > 50 else (ft.colors.YELLOW_400 if data.battery_percent > 20 else ft.colors.RED_400)
+            batt_progress.color = ft.Colors.GREEN_400 if data.battery_percent > 50 else (ft.Colors.YELLOW_400 if data.battery_percent > 20 else ft.Colors.RED_400)
             
             # Update Health Info
             health_val.value = f"{data.max_capacity_percent}%"
@@ -238,8 +238,8 @@ def main(page: ft.Page):
     header = ft.Row(
         [
             ft.Column([
-                ft.Text("Mac Volt Monitor", size=32, weight=ft.FontWeight.BOLD, color=ft.colors.CYAN_400),
-                ft.Text("Native Desktop Visualization", color=ft.colors.GREY_500),
+                ft.Text("Mac Volt Monitor", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
+                ft.Text("Native Desktop Visualization", color=ft.Colors.GREY_500),
             ]),
             ft.SegmentedButton(
                 selected={"balanced"},
@@ -271,33 +271,33 @@ def main(page: ft.Page):
 
     # Battery Progress Section
     batt_percent = ft.Text("0%", size=48, weight=ft.FontWeight.BOLD)
-    batt_status = ft.Text("Discharging • Calculating...", color=ft.colors.GREY_400)
-    batt_progress = ft.ProgressBar(value=0, height=12, border_radius=6, color=ft.colors.GREEN_400, bgcolor=ft.colors.GREY_800)
+    batt_status = ft.Text("Discharging • Calculating...", color=ft.Colors.GREY_400)
+    batt_progress = ft.ProgressBar(value=0, height=12, border_radius=6, color=ft.Colors.GREEN_400, bgcolor=ft.Colors.GREY_800)
     
     battery_section = ft.Container(
         content=ft.Column([
-            ft.Row([batt_percent, ft.Icon(ft.icons.BATTERY_CHARGING_FULL, size=40, color=ft.colors.CYAN_400)], alignment=ft.MainAxisAlignment.START),
+            ft.Row([batt_percent, ft.Icon(ft.Icons.BATTERY_CHARGING_FULL, size=40, color=ft.Colors.CYAN_400)], alignment=ft.MainAxisAlignment.START),
             batt_status,
             ft.Container(height=10),
             batt_progress,
         ]),
         padding=20,
-        bgcolor=ft.colors.with_opacity(0.03, ft.colors.WHITE),
+        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.WHITE),
         border_radius=20,
     )
 
     # Metrics Grid
-    power_card = MetricCard("POWER FLOW", "0", "W", ft.icons.FLASH_ON_ROUNDED, ft.colors.AMBER)
-    volt_card = MetricCard("VOLTAGE", "0.0", "V", ft.icons.ELECTRIC_BOLT)
-    temp_card = MetricCard("TEMP", "0.0", "°C", ft.icons.THERMOSTAT)
-    amp_card = MetricCard("CURRENT", "0", "mA", ft.icons.SPEED)
+    power_card = MetricCard("POWER FLOW", "0", "W", ft.Icons.FLASH_ON_ROUNDED, ft.Colors.AMBER)
+    volt_card = MetricCard("VOLTAGE", "0.0", "V", ft.Icons.ELECTRIC_BOLT)
+    temp_card = MetricCard("TEMP", "0.0", "°C", ft.Icons.THERMOSTAT)
+    amp_card = MetricCard("CURRENT", "0", "mA", ft.Icons.SPEED)
 
     metrics_grid = ft.Row([power_card, volt_card, temp_card, amp_card], spacing=20, wrap=True)
 
     # Health & Charger Details (Side by Side)
     health_val = ft.Text("100%", size=16, weight=ft.FontWeight.BOLD)
     cycle_val = ft.Text("0", size=16, weight=ft.FontWeight.BOLD)
-    cond_val = ft.Text("Normal", size=16, weight=ft.FontWeight.BOLD, color=ft.colors.GREEN_400)
+    cond_val = ft.Text("Normal", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
     
     health_panel = ft.Container(
         content=ft.Column([
@@ -324,7 +324,7 @@ def main(page: ft.Page):
             charger_details,
         ]),
         padding=20,
-        bgcolor=ft.colors.with_opacity(0.03, ft.shadow.SHADOW_COLOR), # Subtle hint
+        bgcolor=ft.colors.with_opacity(0.03, ft.Shadow.SHADOW_COLOR), # Subtle hint
         border=ft.border.all(1, ft.colors.with_opacity(0.1, ft.colors.AMBER)),
         border_radius=15,
         expand=1,
