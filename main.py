@@ -148,8 +148,6 @@ class DataCollector(threading.Thread):
             self.on_update()
             time.sleep(self.data.poll_interval)
 
-# --- UI COMPONENTS ---
-
 class MetricCard(ft.Container):
     def __init__(self, title, value, unit, icon, color=ft.Colors.BLUE_400):
         super().__init__()
@@ -164,7 +162,7 @@ class MetricCard(ft.Container):
                 ft.Column(
                     [
                         self.title_text,
-                        ft.Row([self.value_text, self.unit_text], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.BASELINE, spacing=5),
+                        ft.Row([self.value_text, self.unit_text], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.VerticalAlignment.CENTER, spacing=5),
                     ],
                     spacing=0,
                 ),
@@ -181,21 +179,169 @@ class MetricCard(ft.Container):
         self.value_text.value = str(value)
         if color:
             self.value_text.color = color
-        self.update()
+        try:
+            self.update()
+        except Exception:
+            pass
 
 def main(page: ft.Page):
     page.title = "Mac Volt Monitor"
     page.window_width = 900
-    page.window_height = 700
-    page.bgcolor = "#0B0E14"
+    page.window_height = 800
+    page.bgcolor = "#080A0F"
     page.theme_mode = ft.ThemeMode.DARK
-    page.window_resizable = False
+    page.window_resizable = True
     page.padding = 30
+    page.scroll = ft.ScrollMode.AUTO
 
     # Data Initialization
     data = PowerData()
     lock = threading.Lock()
     
+    # --- UI COMPONENTS ---
+    
+    # Header Section
+    header = ft.Row(
+        [
+            ft.Column([
+                ft.Text("Mac Volt Monitor", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
+                ft.Text("Hardware-Level Energy Dashboard", color=ft.Colors.GREY_500),
+            ]),
+            ft.SegmentedButton(
+                selected=["balanced"],
+                allow_multiple_selection=False,
+                on_change=lambda e: change_mode(e.data),
+                segments=[
+                    ft.Segment(value="perf", label=ft.Text("Perf")),
+                    ft.Segment(value="balanced", label=ft.Text("Bal")),
+                    ft.Segment(value="eco", label=ft.Text("Eco")),
+                ],
+            )
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+    )
+
+    def change_mode(mode_id):
+        raw_id = str(mode_id).strip("{}'\"")
+        with lock:
+            if "perf" in raw_id:
+                data.mode = "PERFORMANCE"
+                data.poll_interval = 0.5
+            elif "eco" in raw_id:
+                data.mode = "ECO"
+                data.poll_interval = 5.0
+            else:
+                data.mode = "BALANCED"
+                data.poll_interval = 2.0
+        update_ui()
+
+    # Battery Progress Section
+    batt_percent = ft.Text("0%", size=48, weight=ft.FontWeight.BOLD)
+    batt_status = ft.Text("Discharging • Calculating...", color=ft.Colors.GREY_400)
+    batt_progress = ft.ProgressBar(value=0, height=12, border_radius=6, color=ft.Colors.GREEN_400, bgcolor=ft.Colors.GREY_800)
+    
+    battery_section = ft.Container(
+        content=ft.Column([
+            ft.Row([batt_percent, ft.Icon(ft.Icons.BATTERY_CHARGING_FULL, size=40, color=ft.Colors.CYAN_400)], alignment=ft.MainAxisAlignment.START),
+            batt_status,
+            ft.Container(height=10),
+            batt_progress,
+        ]),
+        padding=25,
+        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.WHITE),
+        border_radius=20,
+    )
+
+    # Metrics Grid
+    power_card = MetricCard("POWER FLOW", "0", "W", ft.Icons.FLASH_ON_ROUNDED, ft.Colors.AMBER)
+    volt_card = MetricCard("VOLTAGE", "0.0", "V", ft.Icons.ELECTRIC_BOLT)
+    temp_card = MetricCard("TEMP", "0.0", "°C", ft.Icons.THERMOSTAT)
+    amp_card = MetricCard("CURRENT", "0", "mA", ft.Icons.SPEED)
+    metrics_grid = ft.Row([power_card, volt_card, temp_card, amp_card], spacing=15, wrap=True)
+
+    # Health & Charger Details (Side by Side)
+    health_val = ft.Text("100%", size=16, weight=ft.FontWeight.BOLD)
+    cycle_val = ft.Text("0", size=16, weight=ft.FontWeight.BOLD)
+    cond_val = ft.Text("Normal", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
+    
+    health_panel = ft.Container(
+        content=ft.Column([
+            ft.Text("HEALTH INSIGHTS", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
+            ft.Divider(height=10, color=ft.Colors.GREY_800),
+            ft.Row([ft.Text("Capacity: ", color=ft.Colors.GREY_500), health_val]),
+            ft.Row([ft.Text("Cycles: ", color=ft.Colors.GREY_500), cycle_val]),
+            ft.Row([ft.Text("Condition: ", color=ft.Colors.GREY_500), cond_val]),
+        ]),
+        padding=20,
+        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.WHITE),
+        border_radius=15,
+        expand=True
+    )
+
+    charger_watt_text = ft.Text("Disconnected", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
+    charger_details = ft.Text("AC Adapter not detected", size=14, color=ft.Colors.GREY_400)
+    
+    charger_panel = ft.Container(
+        content=ft.Column([
+            ft.Text("CHARGER ATTACHED", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER),
+            ft.Divider(height=10, color=ft.Colors.GREY_800),
+            ft.Row([ft.Icon(ft.Icons.POWER_ROUNDED, color=ft.Colors.AMBER, size=20), charger_watt_text]),
+            charger_details,
+        ]),
+        padding=20,
+        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.BLACK),
+        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.AMBER)),
+        border_radius=15,
+        expand=True,
+    )
+
+    side_panels = ft.Row([health_panel, charger_panel], spacing=20)
+
+    # Chart Section (using flet-charts)
+    if charts:
+        chart = charts.LineChart(
+            data_series=[
+                charts.LineChartData(
+                    data_points=[],
+                    stroke_width=3,
+                    color=ft.Colors.CYAN_400,
+                    curved=True,
+                    below_line_bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.CYAN_400),
+                    below_line_gradient=ft.LinearGradient(
+                        begin=ft.Alignment.TOP_CENTER,
+                        end=ft.Alignment.BOTTOM_CENTER,
+                        colors=[ft.Colors.with_opacity(0.2, ft.Colors.CYAN_400), ft.Colors.TRANSPARENT],
+                    ),
+                )
+            ],
+            border=ft.Border.all(1, ft.Colors.GREY_800),
+            horizontal_grid_lines=charts.ChartGridLines(interval=5, color=ft.Colors.with_opacity(0.05, ft.Colors.GREY_400), width=1),
+            vertical_grid_lines=charts.ChartGridLines(interval=10, color=ft.Colors.with_opacity(0.05, ft.Colors.GREY_400), width=1),
+            left_axis=charts.ChartAxis(labels_size=40, title=ft.Text("Watts"), title_size=30),
+            bottom_axis=charts.ChartAxis(title=ft.Text("Last 100 Samples"), title_size=30),
+            expand=True,
+        )
+        chart_content = chart
+    else:
+        chart = None
+        chart_content = ft.Container(
+            content=ft.Text("Power History: []", color=ft.Colors.GREY_500, size=12),
+            height=100,
+            alignment=ft.Alignment.CENTER
+        )
+
+    chart_section = ft.Container(
+        content=ft.Column([
+            ft.Text("POWER CONSUMPTION TREND", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
+            ft.Container(height=200, content=chart_content),
+        ]),
+        padding=20,
+        bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.WHITE),
+        border_radius=20,
+    )
+
+    meta_text = ft.Text("Initializing collector...", color=ft.Colors.GREY_600, size=11)
+
     # --- REFRESH UI ---
     def update_ui():
         try:
@@ -225,182 +371,44 @@ def main(page: ft.Page):
                 else:
                     charger_panel.visible = False
                 
-                # Update Line Chart if available
+                # Update Chart
                 if charts and chart:
                     chart.data_series[0].data_points = [
                         charts.LineChartDataPoint(i, val) for i, val in enumerate(data.power_history)
                     ]
-                else:
-                    chart_placeholder.value = f"Power History: {list(data.power_history)[-5:]}"
+                elif not charts:
+                    chart_content.content.value = f"Power History: {list(data.power_history)[-5:]}"
                 
                 # Metadata
-                meta_text.value = f"Last Update: {time.strftime('%H:%M:%S')} | Mode: {data.mode}"
+                meta_text.value = f"Update: {time.strftime('%H:%M:%S')} | Mode: {data.mode} | Poll: {data.poll_interval}s"
                 
             page.update()
-        except Exception:
-            pass # UI not ready yet
+        except Exception as e:
+            # Silence expected race conditions during startup
+            pass
 
-    collector = DataCollector(data, lock, update_ui)
-
-    # --- UI LAYOUT ---
-    
-    # Header Section
-    header = ft.Row(
+    # Assemble Layout
+    main_layout = ft.Column(
         [
-            ft.Column([
-                ft.Text("Mac Volt Monitor", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
-                ft.Text("Native Desktop Visualization", color=ft.Colors.GREY_500),
-            ]),
-            ft.SegmentedButton(
-                selected=["balanced"],
-                allow_multiple_selection=False,
-                on_change=lambda e: change_mode(e.data),
-                segments=[
-                    ft.Segment(value="perf", label=ft.Text("Perf")),
-                    ft.Segment(value="balanced", label=ft.Text("Bal")),
-                    ft.Segment(value="eco", label=ft.Text("Eco")),
-                ],
-            )
-        ],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-    )
-
-    def change_mode(mode_id):
-        raw_id = mode_id.strip("{}'\"") # Flet passes stringified set
-        with lock:
-            if "perf" in raw_id:
-                data.mode = "PERFORMANCE"
-                data.poll_interval = 0.5
-            elif "eco" in raw_id:
-                data.mode = "ECO"
-                data.poll_interval = 5.0
-            else:
-                data.mode = "BALANCED"
-                data.poll_interval = 2.0
-        update_ui()
-
-    # Battery Progress Section
-    batt_percent = ft.Text("0%", size=48, weight=ft.FontWeight.BOLD)
-    batt_status = ft.Text("Discharging • Calculating...", color=ft.Colors.GREY_400)
-    batt_progress = ft.ProgressBar(value=0, height=12, border_radius=6, color=ft.Colors.GREEN_400, bgcolor=ft.Colors.GREY_800)
-    
-    battery_section = ft.Container(
-        content=ft.Column([
-            ft.Row([batt_percent, ft.Icon(ft.Icons.BATTERY_CHARGING_FULL, size=40, color=ft.Colors.CYAN_400)], alignment=ft.MainAxisAlignment.START),
-            batt_status,
+            header,
             ft.Container(height=10),
-            batt_progress,
-        ]),
-        padding=20,
-        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.WHITE),
-        border_radius=20,
+            battery_section,
+            ft.Container(height=10),
+            metrics_grid,
+            ft.Container(height=10),
+            side_panels,
+            ft.Container(height=10),
+            chart_section,
+            ft.Container(height=10),
+            ft.Row([meta_text], alignment=ft.MainAxisAlignment.CENTER),
+        ],
+        spacing=0,
     )
 
-    # Metrics Grid
-    power_card = MetricCard("POWER FLOW", "0", "W", ft.Icons.FLASH_ON_ROUNDED, ft.Colors.AMBER)
-    volt_card = MetricCard("VOLTAGE", "0.0", "V", ft.Icons.ELECTRIC_BOLT)
-    temp_card = MetricCard("TEMP", "0.0", "°C", ft.Icons.THERMOSTAT)
-    amp_card = MetricCard("CURRENT", "0", "mA", ft.Icons.SPEED)
-
-    metrics_grid = ft.Row([power_card, volt_card, temp_card, amp_card], spacing=20, wrap=True)
-
-    # Health & Charger Details (Side by Side)
-    health_val = ft.Text("100%", size=16, weight=ft.FontWeight.BOLD)
-    cycle_val = ft.Text("0", size=16, weight=ft.FontWeight.BOLD)
-    cond_val = ft.Text("Normal", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
-    
-    health_panel = ft.Container(
-        content=ft.Column([
-            ft.Text("HEALTH INSIGHTS", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
-            ft.Divider(height=10, color=ft.Colors.GREY_800),
-            ft.Row([ft.Text("Capacity: ", color=ft.Colors.GREY_500), health_val]),
-            ft.Row([ft.Text("Cycles: ", color=ft.Colors.GREY_500), cycle_val]),
-            ft.Row([ft.Text("Condition: ", color=ft.Colors.GREY_500), cond_val]),
-        ]),
-        padding=20,
-        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.WHITE),
-        border_radius=15,
-        expand=1
-    )
-
-    charger_watt_text = ft.Text("65W", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
-    charger_details = ft.Text("20V / 3250mA", size=14, color=ft.Colors.GREY_400)
-    
-    charger_panel = ft.Container(
-        content=ft.Column([
-            ft.Text("CHARGER ATTACHED", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER),
-            ft.Divider(height=10, color=ft.Colors.GREY_800),
-            ft.Row([ft.Icon(ft.Icons.POWER_ROUNDED, color=ft.Colors.AMBER, size=20), charger_watt_text]),
-            charger_details,
-        ]),
-        padding=20,
-        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.BLACK), # Subtle hint
-        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.AMBER)),
-        border_radius=15,
-        expand=1,
-        visible=False
-    )
-
-    side_panels = ft.Row([health_panel, charger_panel], spacing=20)
-
-    # Chart Section (using flet-charts)
-    if charts:
-        chart = charts.LineChart(
-            data_series=[
-                charts.LineChartData(
-                    data_points=[],
-                    stroke_width=3,
-                    color=ft.Colors.CYAN_400,
-                    curved=True,
-                    below_line_bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.CYAN_400),
-                    below_line_gradient=ft.LinearGradient(
-                        begin=ft.Alignment.TOP_CENTER,
-                        end=ft.Alignment.BOTTOM_CENTER,
-                        colors=[ft.Colors.with_opacity(0.2, ft.Colors.CYAN_400), ft.Colors.TRANSPARENT],
-                    ),
-                )
-            ],
-            border=ft.Border.all(1, ft.Colors.GREY_800),
-            horizontal_grid_lines=charts.ChartGridLines(interval=5, color=ft.Colors.with_opacity(0.1, ft.Colors.GREY_400), width=1),
-            vertical_grid_lines=charts.ChartGridLines(interval=10, color=ft.Colors.with_opacity(0.1, ft.Colors.GREY_400), width=1),
-            left_axis=charts.ChartAxis(labels_size=40, title=ft.Text("Watts"), title_size=30),
-            bottom_axis=charts.ChartAxis(title=ft.Text("Last 100 Samples"), title_size=30),
-            expand=True,
-        )
-        chart_content = chart
-    else:
-        chart = None
-        chart_placeholder = ft.Text("Chart support missing (install flet-charts)", color=ft.Colors.GREY_500, size=12)
-        chart_content = ft.Container(content=chart_placeholder, alignment=ft.Alignment.CENTER)
-
-    chart_section = ft.Container(
-        content=ft.Column([
-            ft.Text("POWER CONSUMPTION TREND", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
-            ft.Container(height=200, content=chart_content),
-        ]),
-        padding=20,
-        bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.WHITE),
-        border_radius=20,
-    )
-
-    meta_text = ft.Text("Initializing collector...", color=ft.Colors.GREY_600, size=11)
-
-    # Assemble Page
-    page.add(
-        header,
-        ft.Container(height=20),
-        battery_section,
-        ft.Container(height=10),
-        metrics_grid,
-        ft.Container(height=10),
-        side_panels,
-        ft.Container(height=10),
-        chart_section,
-        ft.Container(height=10),
-        ft.Row([meta_text], alignment=ft.MainAxisAlignment.CENTER)
-    )
+    page.add(main_layout)
     
     # Start collector after UI is built
+    collector = DataCollector(data, lock, update_ui)
     collector.start()
 
 if __name__ == "__main__":
