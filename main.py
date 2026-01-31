@@ -34,12 +34,12 @@ class PowerData:
         self.current_capacity = 0
         self.design_capacity = 0
         
-        # Power Mode: PERFORMANCE (0.5s), BALANCED (2s), ECO (5s)
-        self.mode = "BALANCED"
-        self.poll_interval = 2.0
+        # Power Mode: PERFORMANCE (0.2s), BALANCED (1s), ECO (3s)
+        self.mode = "PERFORMANCE"
+        self.poll_interval = 0.2
         
-        # History for graphs (last 100 points)
-        self.power_history = deque([0.0] * 100, maxlen=100)
+        # History for graphs (last 200 points for smoother look at high speed)
+        self.power_history = deque([0.0] * 200, maxlen=200)
         
         # Syncing
         self.last_update = time.time()
@@ -200,15 +200,23 @@ def main(page: ft.Page):
     
     # --- UI COMPONENTS ---
     
+    # Heartbeat Indicator
+    heartbeat_icon = ft.Icon(ft.Icons.FAVORITE, color=ft.Colors.RED_400, size=12, opacity=1.0)
+    heartbeat_text = ft.Text("LIVE", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_400)
+    heartbeat_container = ft.Row([heartbeat_icon, heartbeat_text], spacing=5, alignment=ft.MainAxisAlignment.END)
+
     # Header Section
     header = ft.Row(
         [
             ft.Column([
-                ft.Text("Mac Volt Monitor", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
+                ft.Row([
+                    ft.Text("Mac Volt Monitor", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
+                    ft.Container(content=heartbeat_container, padding=ft.padding.only(left=20, top=10)),
+                ], vertical_alignment=ft.VerticalAlignment.CENTER),
                 ft.Text("Hardware-Level Energy Dashboard", color=ft.Colors.GREY_500),
             ]),
             ft.SegmentedButton(
-                selected=["balanced"],
+                selected=["perf"],
                 allow_multiple_selection=False,
                 on_change=lambda e: change_mode(e.data),
                 segments=[
@@ -226,13 +234,13 @@ def main(page: ft.Page):
         with lock:
             if "perf" in raw_id:
                 data.mode = "PERFORMANCE"
-                data.poll_interval = 0.5
+                data.poll_interval = 0.2
             elif "eco" in raw_id:
                 data.mode = "ECO"
-                data.poll_interval = 5.0
+                data.poll_interval = 3.0
             else:
                 data.mode = "BALANCED"
-                data.poll_interval = 2.0
+                data.poll_interval = 1.0
         update_ui()
 
     # Battery Progress Section
@@ -343,27 +351,34 @@ def main(page: ft.Page):
     meta_text = ft.Text("Initializing collector...", color=ft.Colors.GREY_600, size=11)
 
     # --- REFRESH UI ---
+    heartbeat_state = [True] # Mutable state for heartbeat toggle
+
     def update_ui():
         try:
             with lock:
-                # Update Cards
+                # 1. Update Heartbeat Animation
+                heartbeat_state[0] = not heartbeat_state[0]
+                heartbeat_icon.opacity = 1.0 if heartbeat_state[0] else 0.3
+                heartbeat_text.color = ft.Colors.RED_400 if heartbeat_state[0] else ft.Colors.RED_900
+                
+                # 2. Update Metric Cards
                 power_card.update_value(f"{data.power_watts}", ft.Colors.GREEN_400 if data.amperage >= 0 else ft.Colors.YELLOW_400)
                 volt_card.update_value(f"{data.voltage:.2f}")
                 temp_card.update_value(f"{data.temperature}", ft.Colors.GREEN_400 if data.temperature < 40 else ft.Colors.RED_400)
                 amp_card.update_value(f"{abs(data.amperage)}")
                 
-                # Update Battery Header
+                # 3. Update Battery Header
                 batt_percent.value = f"{data.battery_percent}%"
                 batt_status.value = f"{data.charging_status} • {data.time_remaining}"
                 batt_progress.value = data.battery_percent / 100
                 batt_progress.color = ft.Colors.GREEN_400 if data.battery_percent > 50 else (ft.Colors.YELLOW_400 if data.battery_percent > 20 else ft.Colors.RED_400)
                 
-                # Update Health Info
+                # 4. Update Health Info
                 health_val.value = f"{data.max_capacity_percent}%"
                 cycle_val.value = f"{data.cycle_count}"
                 cond_val.value = data.condition
                 
-                # Update Charger Info
+                # 5. Update Charger Info
                 if data.charger_connected:
                     charger_watt_text.value = f"{data.charger_wattage}W"
                     charger_details.value = f"{data.adapter_voltage:.1f}V / {data.adapter_current}mA"
@@ -371,20 +386,22 @@ def main(page: ft.Page):
                 else:
                     charger_panel.visible = False
                 
-                # Update Chart
+                # 6. Update Chart / Trend
                 if charts and chart:
                     chart.data_series[0].data_points = [
                         charts.LineChartDataPoint(i, val) for i, val in enumerate(data.power_history)
                     ]
-                elif not charts:
-                    chart_content.content.value = f"Power History: {list(data.power_history)[-5:]}"
+                else:
+                    # Text-based trend visualization for fallback
+                    history_list = list(data.power_history)[-8:]
+                    chart_content.content.value = " • ".join([f"{v:.1f}" for v in history_list])
                 
-                # Metadata
-                meta_text.value = f"Update: {time.strftime('%H:%M:%S')} | Mode: {data.mode} | Poll: {data.poll_interval}s"
+                # 7. Metadata / Status Pulse
+                meta_text.value = f"POLLING: {data.mode} ({data.poll_interval}s) | Updated: {time.strftime('%H:%M:%S')}"
+                meta_text.color = ft.Colors.CYAN_700 if heartbeat_state[0] else ft.Colors.GREY_700
                 
             page.update()
-        except Exception as e:
-            # Silence expected race conditions during startup
+        except Exception:
             pass
 
     # Assemble Layout
