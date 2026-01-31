@@ -1,4 +1,8 @@
 import flet as ft
+try:
+    import flet.charts as charts
+except ImportError:
+    charts = None
 import subprocess
 import re
 import time
@@ -7,6 +11,7 @@ from collections import deque
 import sys
 
 # --- DATA CLASSES ---
+# ... (rest of the file)
 
 class PowerData:
     def __init__(self):
@@ -193,44 +198,49 @@ def main(page: ft.Page):
     
     # --- REFRESH UI ---
     def update_ui():
-        with lock:
-            # Update Cards
-            power_card.update_value(f"{data.power_watts}", ft.Colors.GREEN_400 if data.amperage >= 0 else ft.Colors.YELLOW_400)
-            volt_card.update_value(f"{data.voltage:.2f}")
-            temp_card.update_value(f"{data.temperature}", ft.Colors.GREEN_400 if data.temperature < 40 else ft.Colors.RED_400)
-            amp_card.update_value(f"{abs(data.amperage)}")
-            
-            # Update Battery Header
-            batt_percent.value = f"{data.battery_percent}%"
-            batt_status.value = f"{data.charging_status} • {data.time_remaining}"
-            batt_progress.value = data.battery_percent / 100
-            batt_progress.color = ft.Colors.GREEN_400 if data.battery_percent > 50 else (ft.Colors.YELLOW_400 if data.battery_percent > 20 else ft.Colors.RED_400)
-            
-            # Update Health Info
-            health_val.value = f"{data.max_capacity_percent}%"
-            cycle_val.value = f"{data.cycle_count}"
-            cond_val.value = data.condition
-            
-            # Update Charger Info
-            if data.charger_connected:
-                charger_watt_text.value = f"{data.charger_wattage}W"
-                charger_details.value = f"{data.adapter_voltage:.1f}V / {data.adapter_current}mA"
-                charger_panel.visible = True
-            else:
-                charger_panel.visible = False
-            
-            # Update Line Chart
-            chart.data_series[0].data_points = [
-                ft.LineChartDataPoint(i, val) for i, val in enumerate(data.power_history)
-            ]
-            
-            # Metadata
-            meta_text.value = f"Last Update: {time.strftime('%H:%M:%S')} | Mode: {data.mode}"
-            
-        page.update()
+        try:
+            with lock:
+                # Update Cards
+                power_card.update_value(f"{data.power_watts}", ft.Colors.GREEN_400 if data.amperage >= 0 else ft.Colors.YELLOW_400)
+                volt_card.update_value(f"{data.voltage:.2f}")
+                temp_card.update_value(f"{data.temperature}", ft.Colors.GREEN_400 if data.temperature < 40 else ft.Colors.RED_400)
+                amp_card.update_value(f"{abs(data.amperage)}")
+                
+                # Update Battery Header
+                batt_percent.value = f"{data.battery_percent}%"
+                batt_status.value = f"{data.charging_status} • {data.time_remaining}"
+                batt_progress.value = data.battery_percent / 100
+                batt_progress.color = ft.Colors.GREEN_400 if data.battery_percent > 50 else (ft.Colors.YELLOW_400 if data.battery_percent > 20 else ft.Colors.RED_400)
+                
+                # Update Health Info
+                health_val.value = f"{data.max_capacity_percent}%"
+                cycle_val.value = f"{data.cycle_count}"
+                cond_val.value = data.condition
+                
+                # Update Charger Info
+                if data.charger_connected:
+                    charger_watt_text.value = f"{data.charger_wattage}W"
+                    charger_details.value = f"{data.adapter_voltage:.1f}V / {data.adapter_current}mA"
+                    charger_panel.visible = True
+                else:
+                    charger_panel.visible = False
+                
+                # Update Line Chart if available
+                if charts and chart:
+                    chart.data_series[0].data_points = [
+                        charts.LineChartDataPoint(i, val) for i, val in enumerate(data.power_history)
+                    ]
+                else:
+                    chart_placeholder.value = f"Power History: {list(data.power_history)[-5:]}"
+                
+                # Metadata
+                meta_text.value = f"Last Update: {time.strftime('%H:%M:%S')} | Mode: {data.mode}"
+                
+            page.update()
+        except Exception:
+            pass # UI not ready yet
 
     collector = DataCollector(data, lock, update_ui)
-    collector.start()
 
     # --- UI LAYOUT ---
     
@@ -242,7 +252,7 @@ def main(page: ft.Page):
                 ft.Text("Native Desktop Visualization", color=ft.Colors.GREY_500),
             ]),
             ft.SegmentedButton(
-                selected={"balanced"},
+                selected=["balanced"],
                 allow_multiple_selection=False,
                 on_change=lambda e: change_mode(e.data),
                 segments=[
@@ -301,31 +311,31 @@ def main(page: ft.Page):
     
     health_panel = ft.Container(
         content=ft.Column([
-            ft.Text("HEALTH INSIGHTS", size=12, weight=ft.FontWeight.BOLD, color=ft.colors.CYAN_400),
-            ft.Divider(height=10, color=ft.colors.GREY_800),
-            ft.Row([ft.Text("Capacity: ", color=ft.colors.GREY_500), health_val]),
-            ft.Row([ft.Text("Cycles: ", color=ft.colors.GREY_500), cycle_val]),
-            ft.Row([ft.Text("Condition: ", color=ft.colors.GREY_500), cond_val]),
+            ft.Text("HEALTH INSIGHTS", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.CYAN_400),
+            ft.Divider(height=10, color=ft.Colors.GREY_800),
+            ft.Row([ft.Text("Capacity: ", color=ft.Colors.GREY_500), health_val]),
+            ft.Row([ft.Text("Cycles: ", color=ft.Colors.GREY_500), cycle_val]),
+            ft.Row([ft.Text("Condition: ", color=ft.Colors.GREY_500), cond_val]),
         ]),
         padding=20,
-        bgcolor=ft.colors.with_opacity(0.03, ft.colors.WHITE),
+        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.WHITE),
         border_radius=15,
         expand=1
     )
 
-    charger_watt_text = ft.Text("65W", size=16, weight=ft.FontWeight.BOLD, color=ft.colors.AMBER)
-    charger_details = ft.Text("20V / 3250mA", size=14, color=ft.colors.GREY_400)
+    charger_watt_text = ft.Text("65W", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER)
+    charger_details = ft.Text("20V / 3250mA", size=14, color=ft.Colors.GREY_400)
     
     charger_panel = ft.Container(
         content=ft.Column([
-            ft.Text("CHARGER ATTACHED", size=12, weight=ft.FontWeight.BOLD, color=ft.colors.AMBER),
-            ft.Divider(height=10, color=ft.colors.GREY_800),
-            ft.Row([ft.Icon(ft.icons.POWER_ROUNDED, color=ft.colors.AMBER, size=20), charger_watt_text]),
+            ft.Text("CHARGER ATTACHED", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER),
+            ft.Divider(height=10, color=ft.Colors.GREY_800),
+            ft.Row([ft.Icon(ft.Icons.POWER_ROUNDED, color=ft.Colors.AMBER, size=20), charger_watt_text]),
             charger_details,
         ]),
         padding=20,
-        bgcolor=ft.colors.with_opacity(0.03, ft.Shadow.SHADOW_COLOR), # Subtle hint
-        border=ft.border.all(1, ft.colors.with_opacity(0.1, ft.colors.AMBER)),
+        bgcolor=ft.Colors.with_opacity(0.03, ft.Colors.BLACK), # Subtle hint
+        border=ft.Border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.AMBER)),
         border_radius=15,
         expand=1,
         visible=False
@@ -333,41 +343,47 @@ def main(page: ft.Page):
 
     side_panels = ft.Row([health_panel, charger_panel], spacing=20)
 
-    # Chart Section
-    chart = ft.LineChart(
-        data_series=[
-            ft.LineChartData(
-                data_points=[],
-                stroke_width=3,
-                color=ft.colors.CYAN_400,
-                curved=True,
-                below_line_bgcolor=ft.colors.with_opacity(0.1, ft.colors.CYAN_400),
-                below_line_gradient=ft.LinearGradient(
-                    begin=ft.alignment.top_center,
-                    end=ft.alignment.bottom_center,
-                    colors=[ft.colors.with_opacity(0.2, ft.colors.CYAN_400), ft.colors.TRANSPARENT],
-                ),
-            )
-        ],
-        border=ft.border.all(1, ft.colors.GREY_800),
-        horizontal_grid_lines=ft.ChartGridLines(interval=5, color=ft.colors.with_opacity(0.1, ft.colors.GREY_400), width=1),
-        vertical_grid_lines=ft.ChartGridLines(interval=10, color=ft.colors.with_opacity(0.1, ft.colors.GREY_400), width=1),
-        left_axis=ft.ChartAxis(labels_size=40, title=ft.Text("Watts"), title_size=30),
-        bottom_axis=ft.ChartAxis(title=ft.Text("Last 100 Samples"), title_size=30),
-        expand=True,
-    )
+    # Chart Section (using flet-charts)
+    if charts:
+        chart = charts.LineChart(
+            data_series=[
+                charts.LineChartData(
+                    data_points=[],
+                    stroke_width=3,
+                    color=ft.Colors.CYAN_400,
+                    curved=True,
+                    below_line_bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.CYAN_400),
+                    below_line_gradient=ft.LinearGradient(
+                        begin=ft.Alignment.TOP_CENTER,
+                        end=ft.Alignment.BOTTOM_CENTER,
+                        colors=[ft.Colors.with_opacity(0.2, ft.Colors.CYAN_400), ft.Colors.TRANSPARENT],
+                    ),
+                )
+            ],
+            border=ft.Border.all(1, ft.Colors.GREY_800),
+            horizontal_grid_lines=charts.ChartGridLines(interval=5, color=ft.Colors.with_opacity(0.1, ft.Colors.GREY_400), width=1),
+            vertical_grid_lines=charts.ChartGridLines(interval=10, color=ft.Colors.with_opacity(0.1, ft.Colors.GREY_400), width=1),
+            left_axis=charts.ChartAxis(labels_size=40, title=ft.Text("Watts"), title_size=30),
+            bottom_axis=charts.ChartAxis(title=ft.Text("Last 100 Samples"), title_size=30),
+            expand=True,
+        )
+        chart_content = chart
+    else:
+        chart = None
+        chart_placeholder = ft.Text("Chart support missing (install flet-charts)", color=ft.Colors.GREY_500, size=12)
+        chart_content = ft.Container(content=chart_placeholder, alignment=ft.Alignment.CENTER)
 
     chart_section = ft.Container(
         content=ft.Column([
-            ft.Text("POWER CONSUMPTION GRAPH", size=12, weight=ft.FontWeight.BOLD, color=ft.colors.GREY_500),
-            ft.Container(height=200, content=chart),
+            ft.Text("POWER CONSUMPTION TREND", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
+            ft.Container(height=200, content=chart_content),
         ]),
         padding=20,
-        bgcolor=ft.colors.with_opacity(0.02, ft.colors.WHITE),
+        bgcolor=ft.Colors.with_opacity(0.02, ft.Colors.WHITE),
         border_radius=20,
     )
 
-    meta_text = ft.Text("Initializing collector...", color=ft.colors.GREY_600, size=11)
+    meta_text = ft.Text("Initializing collector...", color=ft.Colors.GREY_600, size=11)
 
     # Assemble Page
     page.add(
@@ -383,6 +399,9 @@ def main(page: ft.Page):
         ft.Container(height=10),
         ft.Row([meta_text], alignment=ft.MainAxisAlignment.CENTER)
     )
+    
+    # Start collector after UI is built
+    collector.start()
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.run(main)
